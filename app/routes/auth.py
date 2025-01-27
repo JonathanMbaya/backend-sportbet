@@ -1,9 +1,8 @@
 from flask import Blueprint, request, jsonify
 from .. import db
 from ..models import User
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from werkzeug.exceptions import BadRequest
-from flask_bcrypt import bcrypt
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -27,9 +26,12 @@ def register():
     db.session.add(user)
     db.session.commit()
 
+
     return jsonify({"message": "User created successfully", "user": {
+
         "id": user.id,
-        "username": user.username,
+        "username": user.username
+
     }}), 201
 
 
@@ -45,6 +47,7 @@ def login():
 
     # Rechercher l'utilisateur dans la base de données
     user = User.query.filter_by(username=username).first()
+    # user.connected = True
 
     # Vérifier si l'utilisateur existe et si le mot de passe est correct
     if not user or not user.check_password(password):
@@ -58,8 +61,43 @@ def login():
         "id": user.id,
         "username": user.username,
         "score": user.score,
+        "wins": user.wins,
+        "loses": user.loses,
+        "draws": user.draws,
+        "match_played": user.match_played,
         "paypal_link": user.paypal_link,
-        "connected": user.connected
+        "connected": user.connected,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at
     }
 
-    return jsonify({"user": user, "access_token": access_token}), 200
+    return jsonify({"user": user, "access_token": access_token}), 200 
+
+@auth_bp.route('/me', methods=['GET'])
+@jwt_required()  # Nécessite un token valide
+def get_current_user():
+    # Récupère l'identifiant de l'utilisateur à partir du token JWT
+    user_id = get_jwt_identity()
+
+    # Recherche l'utilisateur dans la base de données
+    user = User.query.get(user_id)
+
+    if not user:
+        return jsonify({"error": "Utilisateur non trouvé"}), 404
+
+    # Retourne les informations de l'utilisateur
+    return jsonify({
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "score": user.score,
+            "wins": user.wins,
+            "loses": user.loses,
+            "draws": user.draws,
+            "match_played": user.match_played,
+            "paypal_link": user.paypal_link,
+            "connected": user.connected,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        }
+    }), 200

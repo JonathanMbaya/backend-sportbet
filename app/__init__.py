@@ -32,6 +32,11 @@ def create_app():
     from .routes.auth import auth_bp
     app.register_blueprint(auth_bp, url_prefix='/auth')
 
+    # Importation et enregistrement des blueprints
+    from .routes.competition import competition_bp
+    app.register_blueprint(competition_bp, url_prefix='/competition')
+
+
     # Route racine pour vérifier que l'API fonctionne
     @app.route('/')
     def index():
