@@ -34,8 +34,61 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     # Relation avec les compétitions via UserCompetition
     competitions = db.relationship("UserCompetition", back_populates="user")
-    
+    friends = db.relationship(
+        "Friendship",
+        primaryjoin="or_(User.id==Friendship.user_id, User.id==Friendship.friend_id)"
+    )
 
+    def invite_to_competition(self, receiver, competition):
+        """Envoie une invitation à une compétition"""
+        invitation = CompetitionInvitation.query.filter_by(
+            sender_id=self.id, receiver_id=receiver.id, competition_id=competition.id
+        ).first()
+
+        if not invitation:
+            invitation = CompetitionInvitation(sender_id=self.id, receiver_id=receiver.id, competition_id=competition.id)
+            db.session.add(invitation)
+            db.session.commit()
+
+    def respond_to_invitation(self, invitation, response):
+        """Répond à une invitation (accepted/declined)"""
+        if response in ["accepted", "declined"]:
+            invitation.status = response
+            db.session.commit()
+            if response == "accepted":
+                user_competition = UserCompetition(user_id=self.id, competition_id=invitation.competition_id)
+                db.session.add(user_competition)
+                db.session.commit()
+
+    def add_friend(self, friend):
+        """Envoie une demande d'ami"""
+        if not self.is_friend(friend):
+            friendship = Friendship(user_id=self.id, friend_id=friend.id)
+            db.session.add(friendship)
+            db.session.commit()
+
+    def accept_friend_request(self, friend):
+        """Accepte une demande d'ami"""
+        friendship = Friendship.query.filter_by(user_id=friend.id, friend_id=self.id, status="pending").first()
+        if friendship:
+            friendship.status = "accepted"
+            db.session.commit()
+
+    def remove_friend(self, friend):
+        """Supprime un ami"""
+        Friendship.query.filter(
+            (Friendship.user_id == self.id) & (Friendship.friend_id == friend.id) |
+            (Friendship.user_id == friend.id) & (Friendship.friend_id == self.id)
+        ).delete()
+        db.session.commit()
+
+    def is_friend(self, friend):
+        """Vérifie si un utilisateur est ami"""
+        return Friendship.query.filter(
+            ((Friendship.user_id == self.id) & (Friendship.friend_id == friend.id) & (Friendship.status == "accepted")) |
+            ((Friendship.user_id == friend.id) & (Friendship.friend_id == self.id) & (Friendship.status == "accepted"))
+        ).first() is not None
+    
     # Méthodes pour gérer les mots de passe
     def set_password(self, password):
         """Hash le mot de passe et le sauvegarde."""
@@ -139,3 +192,31 @@ class Competition(db.Model):
     def __repr__(self):
         return (f"<Competition(id={self.id}, name={self.name}, status={self.status}, "
                 f"max_participants={self.max_participants}, winner_id={self.winner_id})>")
+    
+
+class CompetitionInvitation(db.Model):
+    __tablename__ = 'competition_invitation'
+
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    competition_id = db.Column(db.Integer, db.ForeignKey('competition.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending, accepted, declined
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    sender = db.relationship("User", foreign_keys=[sender_id])
+    receiver = db.relationship("User", foreign_keys=[receiver_id])
+    competition = db.relationship("Competition", foreign_keys=[competition_id])
+
+
+class Friendship(db.Model):
+    __tablename__ = 'friendship'
+
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
+    friend_id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending, accepted, declined
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relations
+    user = db.relationship("User", foreign_keys=[user_id])
+    friend = db.relationship("User", foreign_keys=[friend_id])

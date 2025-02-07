@@ -36,6 +36,9 @@ def create_app():
     from .routes.competition import competition_bp
     app.register_blueprint(competition_bp, url_prefix='/competition')
 
+    from .routes.friendship import friendship_bp
+    app.register_blueprint(friendship_bp, url_prefix='/friendship')
+
 
     # Route racine pour vérifier que l'API fonctionne
     @app.route('/')
